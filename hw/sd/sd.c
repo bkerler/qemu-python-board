@@ -71,6 +71,14 @@ typedef enum {
     sd_illegal = -2,
 } sd_rsp_type_t;
 
+typedef enum {
+    sd_spi,
+    sd_bc,     /* broadcast -- no response */
+    sd_bcr,    /* broadcast with response */
+    sd_ac,     /* addressed -- no data transfer */
+    sd_adtc,   /* addressed with data transfer */
+} sd_cmd_type_t;
+
 enum SDCardModes {
     sd_inactive,
     sd_card_identification_mode,
@@ -774,16 +782,9 @@ static uint32_t sd_blk_len(SDState *sd)
  */
 static uint32_t sd_bootpart_offset(SDState *sd)
 {
-    bool partitions_enabled;
     unsigned partition_access;
 
     if (!sd->boot_part_size || !sd_is_emmc(sd)) {
-        return 0;
-    }
-
-    partitions_enabled = sd->ext_csd[EXT_CSD_PART_CONFIG]
-                                   & EXT_CSD_PART_CONFIG_EN_MASK;
-    if (!partitions_enabled) {
         return 0;
     }
 
@@ -2478,20 +2479,22 @@ void sd_write_byte(SDState *sd, uint8_t value)
 uint8_t sd_read_byte(SDState *sd)
 {
     /* TODO: Append CRCs */
+    const uint8_t dummy_byte = 0x00;
     uint8_t ret;
     uint32_t io_len;
 
     if (!sd->blk || !blk_is_inserted(sd->blk) || !sd->enable)
-        return 0x00;
+        return dummy_byte;
 
     if (sd->state != sd_sendingdata_state) {
         qemu_log_mask(LOG_GUEST_ERROR,
                       "%s: not in Sending-Data state\n", __func__);
-        return 0x00;
+        return dummy_byte;
     }
 
-    if (sd->card_status & (ADDRESS_ERROR | WP_VIOLATION))
-        return 0x00;
+    if (sd->card_status & (ADDRESS_ERROR | WP_VIOLATION)) {
+        return dummy_byte;
+    }
 
     io_len = sd_blk_len(sd);
 
@@ -2517,7 +2520,7 @@ uint8_t sd_read_byte(SDState *sd)
         if (sd->data_offset == 0) {
             if (!address_in_range(sd, "READ_MULTIPLE_BLOCK",
                                   sd->data_start, io_len)) {
-                return 0x00;
+                return dummy_byte;
             }
             sd_blk_read(sd, sd->data_start, io_len);
         }
@@ -2538,7 +2541,9 @@ uint8_t sd_read_byte(SDState *sd)
         break;
 
     default:
-        g_assert_not_reached();
+        qemu_log_mask(LOG_GUEST_ERROR, "%s: DAT read illegal for command %s\n",
+                                       __func__, sd->last_cmd_name);
+        return dummy_byte;
     }
 
     return ret;
@@ -2815,7 +2820,7 @@ static void sdmmc_common_class_init(ObjectClass *klass, void *data)
 
     device_class_set_props(dc, sdmmc_common_properties);
     dc->vmsd = &sd_vmstate;
-    dc->reset = sd_reset;
+    device_class_set_legacy_reset(dc, sd_reset);
     dc->bus_type = TYPE_SD_BUS;
     set_bit(DEVICE_CATEGORY_STORAGE, dc->categories);
 

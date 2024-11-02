@@ -1296,10 +1296,6 @@ static void spapr_dt_pci_device_cb(PCIBus *bus, PCIDevice *pdev,
         return;
     }
 
-    if (!pdev->enabled) {
-        return;
-    }
-
     err = spapr_dt_pci_device(p->sphb, pdev, p->fdt, p->offset);
     if (err < 0) {
         p->err = err;
@@ -1573,9 +1569,7 @@ static void spapr_pci_pre_plug(HotplugHandler *plug_handler,
      * hotplug, we do not allow functions to be hotplugged to a
      * slot that already has function 0 present
      */
-    if (plugged_dev->hotplugged &&
-        !pci_is_vf(pdev) &&
-        bus->devices[PCI_DEVFN(slotnr, 0)] &&
+    if (plugged_dev->hotplugged && bus->devices[PCI_DEVFN(slotnr, 0)] &&
         PCI_FUNC(pdev->devfn) != 0) {
         error_setg(errp, "PCI: slot %d function 0 already occupied by %s,"
                    " additional functions can no longer be exposed to guest.",
@@ -2254,7 +2248,7 @@ static void spapr_phb_class_init(ObjectClass *klass, void *data)
     dc->realize = spapr_phb_realize;
     dc->unrealize = spapr_phb_unrealize;
     device_class_set_props(dc, spapr_phb_properties);
-    dc->reset = spapr_phb_reset;
+    device_class_set_legacy_reset(dc, spapr_phb_reset);
     dc->vmsd = &vmstate_spapr_pci;
     /* Supported by TYPE_SPAPR_MACHINE */
     dc->user_creatable = true;

@@ -614,6 +614,7 @@ static void pflash_write(PFlashCFI01 *pfl, hwaddr offset,
             if (!pfl->counter) {
                 trace_pflash_write(pfl->name, "block write finished");
                 pfl->wcycle++;
+                break;
             }
 
             pfl->counter--;
@@ -939,7 +940,7 @@ static void pflash_cfi01_class_init(ObjectClass *klass, void *data)
 {
     DeviceClass *dc = DEVICE_CLASS(klass);
 
-    dc->reset = pflash_cfi01_system_reset;
+    device_class_set_legacy_reset(dc, pflash_cfi01_system_reset);
     dc->realize = pflash_cfi01_realize;
     device_class_set_props(dc, pflash_cfi01_properties);
     dc->vmsd = &vmstate_pflash;
